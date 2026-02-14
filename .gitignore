@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.tsbuildinfo
+server/data/dictionary.txt
+server/data/jmdict-cache.json.gz
+.env
