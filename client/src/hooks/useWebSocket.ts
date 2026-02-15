@@ -13,7 +13,7 @@ export function useWebSocket(onMessage: (msg: ServerMessage) => void) {
       const host = window.location.hostname;
       // In dev mode, connect to the server port directly
       const port = import.meta.env.DEV ? '3001' : window.location.port;
-      const url = `${protocol}//${host}:${port}`;
+      const url = port ? `${protocol}//${host}:${port}` : `${protocol}//${host}`;
 
       const ws = new WebSocket(url);
       wsRef.current = ws;
