@@ -3,7 +3,6 @@ import type { DragEvent } from 'react';
 import type { GameState, Tile, TilePlacement, PlayerInfo } from '../../../shared/src/protocol';
 import { BONUS_LAYOUT } from '../constants/board';
 import { BlankTileModal } from './BlankTileModal';
-import { DakutenModal } from './DakutenModal';
 import { DAKUTEN_MAP } from '../../../shared/src/kana';
 
 interface Props {
@@ -41,15 +40,25 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
   const [exchangeMode, setExchangeMode] = useState(false);
   const [exchangeSelection, setExchangeSelection] = useState<Set<number>>(new Set());
   const [blankModal, setBlankModal] = useState<{ tile: Tile; row: number; col: number } | null>(null);
-  const [dakutenModal, setDakutenModal] = useState<{ tile: Tile; row: number; col: number; variants: string[] } | null>(null);
   const [dropTarget, setDropTarget] = useState<{ row: number; col: number } | null>(null);
   const [timeLeft, setTimeLeft] = useState(60);
   const dragTileRef = useRef<Tile | null>(null);
-  const dragSourceRef = useRef<{ row: number; col: number } | null>(null); // board source for re-drag
+  const dragSourceRef = useRef<{ row: number; col: number } | null>(null);
+
+  // Rack tile selection + dakuten override
+  const [selectedRackTile, setSelectedRackTile] = useState<Tile | null>(null);
+  const [dakutenOverride, setDakutenOverride] = useState<string | undefined>(undefined);
 
   const isMyTurn = gameState.currentPlayerId === playerId;
   const isPlaying = gameState.phase === 'playing';
   const isFinished = gameState.phase === 'finished';
+
+  // Dakuten variants for the selected rack tile
+  const selectedVariants = selectedRackTile && !selectedRackTile.isBlank
+    ? DAKUTEN_MAP[selectedRackTile.char] ?? null
+    : null;
+  const canDakuten = !!selectedVariants && selectedVariants.length >= 1;
+  const canHandakuten = !!selectedVariants && selectedVariants.length >= 2;
 
   // Timer countdown + BGM speed-up when < 10s
   useEffect(() => {
@@ -71,8 +80,9 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
   const prevTurnPlayer = useRef(gameState.currentPlayerId);
   useEffect(() => {
     if (prevTurnPlayer.current !== gameState.currentPlayerId) {
-      // Turn changed — clear pending placements (play was accepted or turn was forced)
       setPendingPlacements([]);
+      setSelectedRackTile(null);
+      setDakutenOverride(undefined);
       prevTurnPlayer.current = gameState.currentPlayerId;
     }
   }, [gameState.currentPlayerId]);
@@ -81,6 +91,26 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
   const availableRack = gameState.rack.filter(
     t => !pendingPlacements.some(p => p.tile.id === t.id)
   );
+
+  // The display char for the selected rack tile (with dakuten if active)
+  const selectedDisplayChar = selectedRackTile
+    ? dakutenOverride || selectedRackTile.char
+    : null;
+
+  // --- Dakuten/Handakuten handlers ---
+  const handleDakutenToggle = () => {
+    if (!selectedVariants) return;
+    setDakutenOverride(prev =>
+      prev === selectedVariants[0] ? undefined : selectedVariants[0]
+    );
+  };
+
+  const handleHandakutenToggle = () => {
+    if (!selectedVariants || selectedVariants.length < 2) return;
+    setDakutenOverride(prev =>
+      prev === selectedVariants[1] ? undefined : selectedVariants[1]
+    );
+  };
 
   // --- Drag & Drop handlers ---
   const handleDragStart = (e: DragEvent, tile: Tile, fromBoard?: { row: number; col: number }) => {
@@ -95,7 +125,6 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
     e.preventDefault();
     if (!dragTileRef.current) return;
     if (gameState.board[row][col]) return;
-    // Allow drop on same cell (no-op) or empty cell
     const src = dragSourceRef.current;
     const isOwnCell = src && src.row === row && src.col === col;
     if (!isOwnCell && pendingPlacements.some(p => p.row === row && p.col === col)) return;
@@ -117,13 +146,12 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
     if (!tile) return;
     if (gameState.board[row][col]) return;
 
-    // If dropping on a cell already occupied by another pending tile, ignore
     const existingPending = pendingPlacements.find(p => p.row === row && p.col === col);
     if (existingPending && !(source && source.row === row && source.col === col)) return;
 
     if (source) {
-      // Re-dragging from board: remove from old position, place at new
-      if (source.row === row && source.col === col) return; // dropped on same cell
+      // Re-dragging from board
+      if (source.row === row && source.col === col) return;
       setPendingPlacements(prev => {
         const old = prev.find(p => p.row === source.row && p.col === source.col);
         const filtered = prev.filter(p => !(p.row === source.row && p.col === source.col));
@@ -131,17 +159,15 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
       });
       onTilePlace();
     } else {
-      // Dragging from rack
+      // Dragging from rack — place as base kana (use dakutenOverride if tile was selected)
       if (tile.isBlank) {
         setBlankModal({ tile, row, col });
       } else {
-        const variants = DAKUTEN_MAP[tile.char];
-        if (variants) {
-          setDakutenModal({ tile, row, col, variants });
-        } else {
-          setPendingPlacements(prev => [...prev, { row, col, tile }]);
-          onTilePlace();
-        }
+        const override = selectedRackTile?.id === tile.id ? dakutenOverride : undefined;
+        setPendingPlacements(prev => [...prev, { row, col, tile, assignedChar: override }]);
+        setSelectedRackTile(null);
+        setDakutenOverride(undefined);
+        onTilePlace();
       }
     }
   };
@@ -152,9 +178,7 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
     setDropTarget(null);
   };
 
-  // --- Click handlers (fallback) ---
-  const [selectedRackTile, setSelectedRackTile] = useState<Tile | null>(null);
-
+  // --- Click handlers ---
   const handleCellClick = useCallback((row: number, col: number) => {
     if (!isMyTurn || !isPlaying || exchangeMode) return;
 
@@ -163,6 +187,7 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
     if (existing) {
       setPendingPlacements(prev => prev.filter(p => !(p.row === row && p.col === col)));
       setSelectedRackTile(null);
+      setDakutenOverride(undefined);
       return;
     }
 
@@ -174,17 +199,16 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
       if (selectedRackTile.isBlank) {
         setBlankModal({ tile: selectedRackTile, row, col });
       } else {
-        const variants = DAKUTEN_MAP[selectedRackTile.char];
-        if (variants) {
-          setDakutenModal({ tile: selectedRackTile, row, col, variants });
-        } else {
-          setPendingPlacements(prev => [...prev, { row, col, tile: selectedRackTile }]);
-          setSelectedRackTile(null);
-          onTilePlace();
-        }
+        setPendingPlacements(prev => [
+          ...prev,
+          { row, col, tile: selectedRackTile, assignedChar: dakutenOverride }
+        ]);
+        setSelectedRackTile(null);
+        setDakutenOverride(undefined);
+        onTilePlace();
       }
     }
-  }, [isMyTurn, isPlaying, exchangeMode, selectedRackTile, pendingPlacements, gameState.board, onTilePlace]);
+  }, [isMyTurn, isPlaying, exchangeMode, selectedRackTile, dakutenOverride, pendingPlacements, gameState.board, onTilePlace]);
 
   const handleBlankSelect = (char: string) => {
     if (!blankModal) return;
@@ -193,18 +217,8 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
       { row: blankModal.row, col: blankModal.col, tile: blankModal.tile, assignedChar: char }
     ]);
     setSelectedRackTile(null);
+    setDakutenOverride(undefined);
     setBlankModal(null);
-    onTilePlace();
-  };
-
-  const handleDakutenSelect = (assignedChar?: string) => {
-    if (!dakutenModal) return;
-    setPendingPlacements(prev => [
-      ...prev,
-      { row: dakutenModal.row, col: dakutenModal.col, tile: dakutenModal.tile, assignedChar }
-    ]);
-    setSelectedRackTile(null);
-    setDakutenModal(null);
     onTilePlace();
   };
 
@@ -221,7 +235,13 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
       return;
     }
 
-    setSelectedRackTile(prev => prev?.id === tile.id ? null : tile);
+    if (selectedRackTile?.id === tile.id) {
+      setSelectedRackTile(null);
+      setDakutenOverride(undefined);
+    } else {
+      setSelectedRackTile(tile);
+      setDakutenOverride(undefined);
+    }
   };
 
   const handlePlay = () => {
@@ -233,9 +253,8 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
       assignedChar: p.assignedChar,
     }));
     onPlayTiles(placements);
-    // Don't clear pendingPlacements here — they stay on the board
-    // They will be cleared when the turn changes (success) via the useEffect above
     setSelectedRackTile(null);
+    setDakutenOverride(undefined);
   };
 
   const handleExchangeConfirm = () => {
@@ -248,12 +267,14 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
   const handleReset = () => {
     setPendingPlacements([]);
     setSelectedRackTile(null);
+    setDakutenOverride(undefined);
     onClearError();
   };
 
   const handlePassClick = () => {
     setPendingPlacements([]);
     setSelectedRackTile(null);
+    setDakutenOverride(undefined);
     onPass();
   };
 
@@ -333,28 +354,55 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
         {/* Rack */}
         <div className="rack-area">
           <div className="rack">
-            {availableRack.map(tile => (
-              <div
-                key={tile.id}
-                className={`tile ${
-                  selectedRackTile?.id === tile.id ? 'selected' : ''
-                } ${exchangeSelection.has(tile.id) ? 'selected' : ''} ${
-                  tile.isBlank ? 'blank-tile' : ''
-                }`}
-                onClick={() => handleRackTileClick(tile)}
-                draggable={isMyTurn && isPlaying && !exchangeMode}
-                onDragStart={(e) => handleDragStart(e, tile)}
-                onDragEnd={handleDragEnd}
-              >
-                {tile.isBlank ? '＿' : tile.char}
-                <span className="tile-points">{tile.points}</span>
-              </div>
-            ))}
+            {availableRack.map(tile => {
+              const isSelected = selectedRackTile?.id === tile.id;
+              const displayChar = tile.isBlank
+                ? '＿'
+                : isSelected && dakutenOverride
+                  ? dakutenOverride
+                  : tile.char;
+
+              return (
+                <div
+                  key={tile.id}
+                  className={`tile ${
+                    isSelected ? 'selected' : ''
+                  } ${exchangeSelection.has(tile.id) ? 'selected' : ''} ${
+                    tile.isBlank ? 'blank-tile' : ''
+                  }`}
+                  onClick={() => handleRackTileClick(tile)}
+                  draggable={isMyTurn && isPlaying && !exchangeMode}
+                  onDragStart={(e) => handleDragStart(e, tile)}
+                  onDragEnd={handleDragEnd}
+                >
+                  {displayChar}
+                  <span className="tile-points">{tile.points}</span>
+                </div>
+              );
+            })}
           </div>
 
           {/* Controls */}
           {isMyTurn && isPlaying && !exchangeMode && (
             <div className="controls">
+              {/* Dakuten/Handakuten buttons */}
+              <button
+                className={`btn btn-dakuten ${dakutenOverride && canDakuten && dakutenOverride === selectedVariants![0] ? 'active' : ''}`}
+                onClick={handleDakutenToggle}
+                disabled={!canDakuten}
+                title="濁音"
+              >
+                ゛
+              </button>
+              <button
+                className={`btn btn-dakuten ${dakutenOverride && canHandakuten && dakutenOverride === selectedVariants![1] ? 'active' : ''}`}
+                onClick={handleHandakutenToggle}
+                disabled={!canHandakuten}
+                title="半濁音"
+              >
+                ゜
+              </button>
+
               <button
                 className="btn btn-primary"
                 onClick={handlePlay}
@@ -458,16 +506,6 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
         <BlankTileModal
           onSelect={handleBlankSelect}
           onCancel={() => setBlankModal(null)}
-        />
-      )}
-
-      {/* Dakuten selection modal */}
-      {dakutenModal && (
-        <DakutenModal
-          baseChar={dakutenModal.tile.char}
-          variants={dakutenModal.variants}
-          onSelect={handleDakutenSelect}
-          onCancel={() => setDakutenModal(null)}
         />
       )}
 

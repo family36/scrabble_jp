@@ -552,22 +552,32 @@ input[type="text"]:focus {
   color: white;
 }
 
-/* Dakuten Modal */
-.dakuten-modal {
-  max-width: 280px;
+/* Dakuten/Handakuten buttons */
+.btn-dakuten {
+  font-size: 1.3rem;
+  min-width: 40px;
+  padding: 4px 8px;
+  background: var(--surface);
+  border: 2px solid #555;
+  color: #888;
+  transition: all 0.15s;
 }
 
-.dakuten-options {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  margin-bottom: 16px;
+.btn-dakuten:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+  cursor: pointer;
 }
 
-.dakuten-btn {
-  width: 52px;
-  height: 52px;
-  font-size: 1.4rem;
+.btn-dakuten:not(:disabled):hover {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-dakuten.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
 }
 
 /* Sidebar top row */
