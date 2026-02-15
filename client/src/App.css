@@ -552,6 +552,24 @@ input[type="text"]:focus {
   color: white;
 }
 
+/* Dakuten Modal */
+.dakuten-modal {
+  max-width: 280px;
+}
+
+.dakuten-options {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.dakuten-btn {
+  width: 52px;
+  height: 52px;
+  font-size: 1.4rem;
+}
+
 /* Sidebar top row */
 .sidebar-top {
   display: flex;

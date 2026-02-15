@@ -8,7 +8,7 @@ export interface Tile {
   char: string;       // ひらがな文字 or '' (ブランク)
   points: number;
   isBlank: boolean;
-  assignedChar?: string; // ブランクに割り当てた文字
+  assignedChar?: string; // ブランクに割り当てた文字 or 濁音/半濁音
 }
 
 /** 盤面セル */
@@ -35,7 +35,7 @@ export interface TilePlacement {
   row: number;
   col: number;
   tileId: number;
-  assignedChar?: string; // ブランクの場合
+  assignedChar?: string; // ブランク or 濁音/半濁音の割り当て
 }
 
 /** ゲーム状態 (クライアント向け) */

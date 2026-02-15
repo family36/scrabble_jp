@@ -3,6 +3,8 @@ import type { DragEvent } from 'react';
 import type { GameState, Tile, TilePlacement, PlayerInfo } from '../../../shared/src/protocol';
 import { BONUS_LAYOUT } from '../constants/board';
 import { BlankTileModal } from './BlankTileModal';
+import { DakutenModal } from './DakutenModal';
+import { DAKUTEN_MAP } from '../../../shared/src/kana';
 
 interface Props {
   gameState: GameState;
@@ -39,6 +41,7 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
   const [exchangeMode, setExchangeMode] = useState(false);
   const [exchangeSelection, setExchangeSelection] = useState<Set<number>>(new Set());
   const [blankModal, setBlankModal] = useState<{ tile: Tile; row: number; col: number } | null>(null);
+  const [dakutenModal, setDakutenModal] = useState<{ tile: Tile; row: number; col: number; variants: string[] } | null>(null);
   const [dropTarget, setDropTarget] = useState<{ row: number; col: number } | null>(null);
   const [timeLeft, setTimeLeft] = useState(60);
   const dragTileRef = useRef<Tile | null>(null);
@@ -132,8 +135,13 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
       if (tile.isBlank) {
         setBlankModal({ tile, row, col });
       } else {
-        setPendingPlacements(prev => [...prev, { row, col, tile }]);
-        onTilePlace();
+        const variants = DAKUTEN_MAP[tile.char];
+        if (variants) {
+          setDakutenModal({ tile, row, col, variants });
+        } else {
+          setPendingPlacements(prev => [...prev, { row, col, tile }]);
+          onTilePlace();
+        }
       }
     }
   };
@@ -166,9 +174,14 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
       if (selectedRackTile.isBlank) {
         setBlankModal({ tile: selectedRackTile, row, col });
       } else {
-        setPendingPlacements(prev => [...prev, { row, col, tile: selectedRackTile }]);
-        setSelectedRackTile(null);
-        onTilePlace();
+        const variants = DAKUTEN_MAP[selectedRackTile.char];
+        if (variants) {
+          setDakutenModal({ tile: selectedRackTile, row, col, variants });
+        } else {
+          setPendingPlacements(prev => [...prev, { row, col, tile: selectedRackTile }]);
+          setSelectedRackTile(null);
+          onTilePlace();
+        }
       }
     }
   }, [isMyTurn, isPlaying, exchangeMode, selectedRackTile, pendingPlacements, gameState.board, onTilePlace]);
@@ -181,6 +194,17 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
     ]);
     setSelectedRackTile(null);
     setBlankModal(null);
+    onTilePlace();
+  };
+
+  const handleDakutenSelect = (assignedChar?: string) => {
+    if (!dakutenModal) return;
+    setPendingPlacements(prev => [
+      ...prev,
+      { row: dakutenModal.row, col: dakutenModal.col, tile: dakutenModal.tile, assignedChar }
+    ]);
+    setSelectedRackTile(null);
+    setDakutenModal(null);
     onTilePlace();
   };
 
@@ -282,7 +306,7 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
                 >
                   {committedTile ? (
                     <div className={`tile committed ${committedTile.isBlank ? 'blank-tile' : ''}`}>
-                      {committedTile.isBlank ? committedTile.assignedChar : committedTile.char}
+                      {committedTile.assignedChar || committedTile.char}
                       <span className="tile-points">{committedTile.points}</span>
                     </div>
                   ) : pending ? (
@@ -292,7 +316,7 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
                       onDragStart={(e) => handleDragStart(e, pending.tile, { row, col })}
                       onDragEnd={handleDragEnd}
                     >
-                      {pending.tile.isBlank ? pending.assignedChar : pending.tile.char}
+                      {pending.assignedChar || pending.tile.char}
                       <span className="tile-points">{pending.tile.points}</span>
                     </div>
                   ) : (
@@ -434,6 +458,16 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
         <BlankTileModal
           onSelect={handleBlankSelect}
           onCancel={() => setBlankModal(null)}
+        />
+      )}
+
+      {/* Dakuten selection modal */}
+      {dakutenModal && (
+        <DakutenModal
+          baseChar={dakutenModal.tile.char}
+          variants={dakutenModal.variants}
+          onSelect={handleDakutenSelect}
+          onCancel={() => setDakutenModal(null)}
         />
       )}
 

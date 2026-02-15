@@ -1,6 +1,7 @@
 import { Tile, TilePlacement, BonusType } from 'shared/src/protocol.js';
 import { BOARD_SIZE } from './tiles.js';
 import { Dictionary } from './Dictionary.js';
+import { isValidDakutenAssignment, generateSmallKanaVariants } from 'shared/src/kana.js';
 
 interface WordFound {
   word: string;
@@ -41,6 +42,12 @@ export class BoardValidator {
       if (tile.isBlank) {
         if (!p.assignedChar) {
           throw new Error('ブランクタイルに文字を指定してください');
+        }
+        placedTile.assignedChar = p.assignedChar;
+      } else if (p.assignedChar) {
+        // 濁音・半濁音の割り当て検証
+        if (!isValidDakutenAssignment(tile.char, p.assignedChar)) {
+          throw new Error(`「${tile.char}」に「${p.assignedChar}」は割り当てできません`);
         }
         placedTile.assignedChar = p.assignedChar;
       }
@@ -119,14 +126,28 @@ export class BoardValidator {
       throw new Error('有効な単語が形成されていません');
     }
 
-    // 辞書チェック
+    // 辞書チェック（小さい仮名バリアントも考慮）
     for (const w of words) {
-      if (!this.dictionary.isValid(w.word)) {
+      const matched = this.findValidVariant(w.word);
+      if (!matched) {
         throw new Error(`「${w.word}」は辞書にありません`);
       }
+      // マッチした表記に更新（履歴表示用）
+      w.word = matched;
     }
 
     return words;
+  }
+
+  /**
+   * 小さい仮名の全バリアントを試して辞書に存在するものを返す
+   */
+  private findValidVariant(word: string): string | null {
+    const variants = generateSmallKanaVariants(word);
+    for (const v of variants) {
+      if (this.dictionary.isValid(v)) return v;
+    }
+    return null;
   }
 
   private extractWords(
@@ -184,7 +205,7 @@ export class BoardValidator {
     let word = '';
     while (r < BOARD_SIZE && c < BOARD_SIZE && board[r][c] !== null) {
       const tile = board[r][c]!;
-      const ch = tile.isBlank && tile.assignedChar ? tile.assignedChar : tile.char;
+      const ch = tile.assignedChar || tile.char;
       word += ch;
       tiles.push({ tile, row: r, col: c, isNew: newPositions.has(`${r},${c}`) });
       r += dr;

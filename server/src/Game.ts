@@ -172,7 +172,7 @@ export class Game {
     for (const p of placements) {
       const tile = rackMap.get(p.tileId)!;
       const placed = { ...tile };
-      if (tile.isBlank && p.assignedChar) {
+      if (p.assignedChar) {
         placed.assignedChar = p.assignedChar;
       }
       this.board[p.row][p.col] = placed;
