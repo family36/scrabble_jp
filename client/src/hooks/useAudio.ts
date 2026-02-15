@@ -232,7 +232,7 @@ function scheduleMelodyNote(
   freq: number, t: number, dur: number,
 ) {
   const osc = ctx.createOscillator();
-  osc.type = 'sine';
+  osc.type = 'triangle';
   osc.frequency.value = freq;
 
   // Gentle low-pass per note for extra softness

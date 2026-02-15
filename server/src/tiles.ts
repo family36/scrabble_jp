@@ -54,6 +54,7 @@ export const TILE_DEFINITIONS: { char: string; points: number; count: number }[]
   { char: 'ゃ', points: 3, count: 1 },
   { char: 'ゅ', points: 3, count: 1 },
   { char: 'ょ', points: 3, count: 1 },
+  { char: 'ー', points: 3, count: 2 },
   // 少ない（4点）
   { char: 'ざ', points: 4, count: 1 },
   { char: 'じ', points: 4, count: 1 },
