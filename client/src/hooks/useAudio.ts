@@ -22,36 +22,314 @@ function saveSettings(s: AudioSettings) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
 }
 
-// Pentatonic scale frequencies (C, D, E, G, A in multiple octaves)
-const PENTA = [
-  261.63, 293.66, 329.63, 392.00, 440.00,  // C4-A4
-  523.25, 587.33, 659.25, 783.99, 880.00,  // C5-A5
+// ---- Lo-fi Hip-Hop BGM Constants ----
+
+const BPM_NORMAL = 72;
+const BPM_FAST = 88;
+const LOOP_BARS = 16;
+
+function beatDur(bpm: number) { return 60 / bpm; }
+function barDur(bpm: number) { return beatDur(bpm) * 4; }
+function loopDur(bpm: number) { return barDur(bpm) * LOOP_BARS; }
+
+// Lo-fi filter cutoff
+const LOFI_CUTOFF = 900;
+
+// Chord voicings (jazz 7ths, mid-low register for warmth)
+// Each chord lasts 4 bars
+const CHORD_PROG: number[][] = [
+  [164.81, 196.00, 246.94, 293.66],  // Em7:   E3, G3, B3, D4
+  [130.81, 164.81, 196.00, 246.94],  // Cmaj7: C3, E3, G3, B3
+  [110.00, 130.81, 164.81, 196.00],  // Am7:   A2, C3, E3, G3
+  [123.47, 146.83, 185.00, 220.00],  // Bm7:   B2, D3, F#3, A3
 ];
 
-// Melody designed to loop seamlessly: ends on degree that resolves back to start (C)
-// Uses indices into PENTA: 0=C4,1=D4,2=E4,3=G4,4=A4, 5=C5,6=D5,7=E5,8=G5,9=A5
-const BGM_MELODY = [
-  0, 2, 4, 3,   // C E A G  — opening phrase
-  2, 4, 3, 1,   // E A G D  — develop
-  0, 3, 2, 4,   // C G E A  — variation
-  3, 1, 2, 0,   // G D E C  — resolve back to C for seamless loop
+// Bass root for each chord section
+const BASS_ROOTS = [82.41, 65.41, 55.00, 61.74]; // E2, C2, A1, B1
+
+// Melody: Em pentatonic
+const MEL = [329.63, 392.00, 440.00, 493.88, 587.33]; // E4, G4, A4, B4, D5
+
+// Melody sequence: [barInLoop, beatInBar, melodyIndex, durationInBeats]
+const MELODY_SEQ: [number, number, number, number][] = [
+  // Bars 0-3 (Em7)
+  [0, 0.5, 2, 1.5],
+  [0, 3, 4, 1],
+  [1, 1, 3, 2],
+  [2, 0, 2, 1],
+  [2, 2, 1, 2],
+  [3, 0.5, 0, 1.5],
+  [3, 3, 1, 1],
+  // Bars 4-7 (Cmaj7)
+  [4, 0, 4, 2],
+  [4, 2.5, 3, 1.5],
+  [5, 1, 2, 1.5],
+  [5, 3, 1, 1],
+  [6, 0.5, 0, 2],
+  [6, 3, 2, 1],
+  [7, 0, 3, 1.5],
+  [7, 2.5, 1, 1.5],
+  // Bars 8-11 (Am7)
+  [8, 0, 3, 2],
+  [8, 2.5, 4, 1.5],
+  [9, 0.5, 2, 2],
+  [9, 3, 1, 1],
+  [10, 0, 0, 1.5],
+  [10, 2, 2, 2],
+  [11, 0.5, 3, 1.5],
+  [11, 2.5, 4, 1.5],
+  // Bars 12-15 (Bm7) — resolves back for loop
+  [12, 0, 2, 2],
+  [12, 2.5, 3, 1.5],
+  [13, 0.5, 4, 1.5],
+  [13, 2.5, 2, 1.5],
+  [14, 0, 1, 2],
+  [14, 3, 0, 1],
+  [15, 0, 1, 2],
+  [15, 2.5, 0, 1.5],
 ];
 
-const BGM_NOTE_NORMAL = 0.55;
-const BGM_NOTE_FAST = 0.32;
+// Drum pattern per bar: [beatOffset, type]
+// 'K' = kick, 'S' = snare, 'H' = hi-hat
+const DRUM_PATTERN: [number, 'K' | 'S' | 'H'][] = [
+  [0, 'K'], [0, 'H'],
+  [0.5, 'H'],
+  [1, 'S'], [1, 'H'],
+  [1.5, 'H'],
+  [2, 'K'], [2, 'H'],
+  [2.75, 'K'],           // ghost kick for swing
+  [2.5, 'H'],
+  [3, 'S'], [3, 'H'],
+  [3.5, 'H'],
+];
+
+// ---- Audio scheduling helpers ----
+
+function scheduleChordPad(
+  ctx: AudioContext, dest: AudioNode,
+  freqs: number[], time: number, dur: number,
+) {
+  for (const freq of freqs) {
+    const osc = ctx.createOscillator();
+    osc.type = 'triangle';
+    // Slight random detune for lo-fi warmth
+    osc.detune.value = (Math.random() - 0.5) * 12;
+    osc.frequency.value = freq;
+
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, time);
+    env.gain.linearRampToValueAtTime(0.035, time + 0.3);
+    env.gain.setValueAtTime(0.035, time + dur - 0.5);
+    env.gain.linearRampToValueAtTime(0, time + dur);
+
+    osc.connect(env);
+    env.connect(dest);
+    osc.start(time);
+    osc.stop(time + dur + 0.05);
+  }
+}
+
+function scheduleBass(
+  ctx: AudioContext, dest: AudioNode,
+  rootFreq: number, sectionStart: number, sectionDur: number, beat: number,
+) {
+  // Play bass on beats 1 and 3 of each bar
+  const barsInSection = 4;
+  const bar = beat * 4;
+  for (let b = 0; b < barsInSection; b++) {
+    for (const offset of [0, 2]) {
+      const t = sectionStart + b * bar + offset * beat;
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = rootFreq;
+
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(0.12, t + 0.05);
+      env.gain.setValueAtTime(0.12, t + beat * 1.2);
+      env.gain.linearRampToValueAtTime(0, t + beat * 1.8);
+
+      osc.connect(env);
+      env.connect(dest);
+      osc.start(t);
+      osc.stop(t + beat * 2 + 0.05);
+    }
+  }
+}
+
+function scheduleKick(ctx: AudioContext, dest: AudioNode, t: number) {
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(150, t);
+  osc.frequency.exponentialRampToValueAtTime(40, t + 0.12);
+
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0.35, t);
+  env.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
+
+  osc.connect(env);
+  env.connect(dest);
+  osc.start(t);
+  osc.stop(t + 0.3);
+}
+
+function scheduleSnare(ctx: AudioContext, dest: AudioNode, t: number) {
+  // Noise burst through bandpass
+  const bufferSize = ctx.sampleRate * 0.12;
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = Math.random() * 2 - 1;
+  }
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = buffer;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 3000;
+  filter.Q.value = 0.8;
+
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0.2, t);
+  env.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+
+  noise.connect(filter);
+  filter.connect(env);
+  env.connect(dest);
+  noise.start(t);
+  noise.stop(t + 0.15);
+}
+
+function scheduleHiHat(ctx: AudioContext, dest: AudioNode, t: number) {
+  const bufferSize = ctx.sampleRate * 0.04;
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = Math.random() * 2 - 1;
+  }
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = buffer;
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.value = 7000;
+
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0.06, t);
+  env.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+
+  noise.connect(filter);
+  filter.connect(env);
+  env.connect(dest);
+  noise.start(t);
+  noise.stop(t + 0.06);
+}
+
+function scheduleMelodyNote(
+  ctx: AudioContext, dest: AudioNode,
+  freq: number, t: number, dur: number,
+) {
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.value = freq;
+
+  // Gentle low-pass per note for extra softness
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 1200;
+  filter.Q.value = 0.5;
+
+  const env = ctx.createGain();
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(0.09, t + 0.06);
+  env.gain.setValueAtTime(0.09, t + dur * 0.6);
+  env.gain.linearRampToValueAtTime(0, t + dur);
+
+  osc.connect(filter);
+  filter.connect(env);
+  env.connect(dest);
+  osc.start(t);
+  osc.stop(t + dur + 0.05);
+}
+
+function scheduleVinylNoise(
+  ctx: AudioContext, dest: AudioNode,
+  startTime: number, dur: number,
+) {
+  const bufferSize = Math.ceil(ctx.sampleRate * dur);
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+
+  // Sparse crackle: mostly silence with occasional tiny pops
+  for (let i = 0; i < bufferSize; i++) {
+    data[i] = Math.random() < 0.002 ? (Math.random() - 0.5) * 0.3 : 0;
+  }
+
+  const noise = ctx.createBufferSource();
+  noise.buffer = buffer;
+
+  const env = ctx.createGain();
+  env.gain.value = 0.15;
+
+  noise.connect(env);
+  env.connect(dest);
+  noise.start(startTime);
+  noise.stop(startTime + dur + 0.01);
+}
+
+// Schedule one full BGM loop
+function scheduleBGMLoop(
+  ctx: AudioContext, masterGain: GainNode,
+  lofiFilter: BiquadFilterNode, startTime: number, bpm: number,
+) {
+  const beat = beatDur(bpm);
+  const bar = barDur(bpm);
+  const totalDur = loopDur(bpm);
+
+  // Chord pads + bass
+  for (let ci = 0; ci < 4; ci++) {
+    const secStart = startTime + ci * 4 * bar;
+    const secDur = 4 * bar;
+    scheduleChordPad(ctx, lofiFilter, CHORD_PROG[ci], secStart, secDur);
+    scheduleBass(ctx, lofiFilter, BASS_ROOTS[ci], secStart, secDur, beat);
+  }
+
+  // Drums per bar
+  for (let b = 0; b < LOOP_BARS; b++) {
+    const barStart = startTime + b * bar;
+    for (const [offset, type] of DRUM_PATTERN) {
+      const t = barStart + offset * beat;
+      if (type === 'K') scheduleKick(ctx, lofiFilter, t);
+      else if (type === 'S') scheduleSnare(ctx, lofiFilter, t);
+      else scheduleHiHat(ctx, lofiFilter, t);
+    }
+  }
+
+  // Melody
+  for (const [barIdx, beatOff, melIdx, durBeats] of MELODY_SEQ) {
+    const t = startTime + barIdx * bar + beatOff * beat;
+    scheduleMelodyNote(ctx, lofiFilter, MEL[melIdx], t, durBeats * beat);
+  }
+
+  // Vinyl crackle
+  scheduleVinylNoise(ctx, lofiFilter, startTime, totalDur);
+}
+
+// ---- Hook ----
 
 export function useAudio() {
   const ctxRef = useRef<AudioContext | null>(null);
   const bgmGainRef = useRef<GainNode | null>(null);
   const seGainRef = useRef<GainNode | null>(null);
+  const lofiFilterRef = useRef<BiquadFilterNode | null>(null);
   const bgmRunning = useRef(false);
   const bgmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const bgmScheduledUntil = useRef(0); // audio-time up to which notes are scheduled
-  const bgmNoteIndex = useRef(0);      // current position in melody
-  const bgmSpeedRef = useRef(BGM_NOTE_NORMAL);
+  const bgmNextLoopTime = useRef(0);
+  const bgmBpmRef = useRef(BPM_NORMAL);
   const [settings, setSettings] = useState<AudioSettings>(loadSettings);
 
-  // Ensure AudioContext exists (must be called after user interaction)
   const ensureCtx = useCallback(() => {
     if (ctxRef.current) {
       if (ctxRef.current.state === 'suspended') ctxRef.current.resume();
@@ -65,15 +343,22 @@ export function useAudio() {
     bgmGain.connect(ctx.destination);
     bgmGainRef.current = bgmGain;
 
+    // Master lo-fi filter
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = LOFI_CUTOFF;
+    filter.Q.value = 0.7;
+    filter.connect(bgmGain);
+    lofiFilterRef.current = filter;
+
     const seGain = ctx.createGain();
     seGain.gain.value = settings.muted ? 0 : settings.seVolume;
     seGain.connect(ctx.destination);
     seGainRef.current = seGain;
 
     return ctx;
-  }, []); // settings read from ref-like state at creation time only
+  }, []);
 
-  // Sync gain values when settings change
   useEffect(() => {
     saveSettings(settings);
     if (bgmGainRef.current) {
@@ -84,56 +369,37 @@ export function useAudio() {
     }
   }, [settings]);
 
-  // --- BGM: gentle pentatonic loop with look-ahead scheduling ---
-  // Schedules notes ahead of time using AudioContext clock for seamless looping
-  const scheduleBGMNotes = useCallback((ctx: AudioContext, gain: GainNode) => {
+  // BGM loop scheduler: schedules the next loop ~4s before current ends
+  const scheduleNextLoop = useCallback(() => {
     if (!bgmRunning.current) return;
+    const ctx = ctxRef.current!;
+    const gain = bgmGainRef.current!;
+    const filter = lofiFilterRef.current!;
 
-    const lookAhead = 2.0; // schedule 2 seconds ahead
     const now = ctx.currentTime;
-    let t = bgmScheduledUntil.current;
-    if (t < now) t = now; // catch up if behind
+    let nextStart = bgmNextLoopTime.current;
+    if (nextStart < now) nextStart = now;
 
-    while (t < now + lookAhead) {
-      const dur = bgmSpeedRef.current;
-      const noteIdx = BGM_MELODY[bgmNoteIndex.current % BGM_MELODY.length];
-      const freq = PENTA[noteIdx];
+    const bpm = bgmBpmRef.current;
+    scheduleBGMLoop(ctx, gain, filter, nextStart, bpm);
+    bgmNextLoopTime.current = nextStart + loopDur(bpm);
 
-      const osc = ctx.createOscillator();
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-
-      const noteGain = ctx.createGain();
-      // Smooth envelope: fade in, sustain, fade out — overlaps slightly for legato
-      noteGain.gain.setValueAtTime(0, t);
-      noteGain.gain.linearRampToValueAtTime(0.15, t + dur * 0.08);
-      noteGain.gain.setValueAtTime(0.15, t + dur * 0.5);
-      noteGain.gain.linearRampToValueAtTime(0, t + dur);
-
-      osc.connect(noteGain);
-      noteGain.connect(gain);
-      osc.start(t);
-      osc.stop(t + dur + 0.01);
-
-      t += dur;
-      bgmNoteIndex.current++;
-    }
-
-    bgmScheduledUntil.current = t;
-
-    // Re-check periodically (well before look-ahead expires)
-    bgmTimerRef.current = setTimeout(() => scheduleBGMNotes(ctx, gain), 800);
+    // Schedule next check ~4s before loop ends
+    const msUntilEnd = (bgmNextLoopTime.current - ctx.currentTime - 4) * 1000;
+    bgmTimerRef.current = setTimeout(
+      () => scheduleNextLoop(),
+      Math.max(msUntilEnd, 1000),
+    );
   }, []);
 
   const playBGM = useCallback(() => {
     const ctx = ensureCtx();
     if (bgmRunning.current) return;
     bgmRunning.current = true;
-    bgmNoteIndex.current = 0;
-    bgmScheduledUntil.current = ctx.currentTime;
-    bgmSpeedRef.current = BGM_NOTE_NORMAL;
-    scheduleBGMNotes(ctx, bgmGainRef.current!);
-  }, [ensureCtx, scheduleBGMNotes]);
+    bgmBpmRef.current = BPM_NORMAL;
+    bgmNextLoopTime.current = ctx.currentTime;
+    scheduleNextLoop();
+  }, [ensureCtx, scheduleNextLoop]);
 
   const stopBGM = useCallback(() => {
     bgmRunning.current = false;
@@ -144,7 +410,7 @@ export function useAudio() {
   }, []);
 
   const setBGMFast = useCallback((fast: boolean) => {
-    bgmSpeedRef.current = fast ? BGM_NOTE_FAST : BGM_NOTE_NORMAL;
+    bgmBpmRef.current = fast ? BPM_FAST : BPM_NORMAL;
   }, []);
 
   // --- SE ---
@@ -155,7 +421,6 @@ export function useAudio() {
 
     switch (name) {
       case 'tilePlace': {
-        // Short click/knock sound
         const osc = ctx.createOscillator();
         osc.type = 'triangle';
         osc.frequency.value = 800;
@@ -169,7 +434,6 @@ export function useAudio() {
         break;
       }
       case 'wordSuccess': {
-        // Rising chord chime (C-E-G-A)
         const freqs = [523.25, 659.25, 783.99, 880.00];
         freqs.forEach((f, i) => {
           const osc = ctx.createOscillator();
@@ -188,7 +452,6 @@ export function useAudio() {
         break;
       }
       case 'wordError': {
-        // Low short buzzer
         const osc = ctx.createOscillator();
         osc.type = 'square';
         osc.frequency.value = 150;
@@ -202,7 +465,6 @@ export function useAudio() {
         break;
       }
       case 'turnStart': {
-        // Gentle attention chime (two notes)
         [659.25, 880.00].forEach((f, i) => {
           const osc = ctx.createOscillator();
           osc.type = 'sine';
@@ -220,7 +482,6 @@ export function useAudio() {
         break;
       }
       case 'gameStart': {
-        // Bright fanfare (ascending arpeggio)
         const notes = [523.25, 659.25, 783.99, 880.00, 1046.50];
         notes.forEach((f, i) => {
           const osc = ctx.createOscillator();
@@ -239,7 +500,6 @@ export function useAudio() {
         break;
       }
       case 'gameOver': {
-        // Ending melody (descending)
         const notes = [880.00, 783.99, 659.25, 523.25];
         notes.forEach((f, i) => {
           const osc = ctx.createOscillator();
@@ -268,7 +528,6 @@ export function useAudio() {
     setSettings(prev => ({ ...prev, bgmVolume: bgm, seVolume: se }));
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       bgmRunning.current = false;
