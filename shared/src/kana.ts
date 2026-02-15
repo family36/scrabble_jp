@@ -12,6 +12,24 @@ export const LARGE_TO_SMALL: Record<string, string> = {
   'つ': 'っ', 'や': 'ゃ', 'ゆ': 'ゅ', 'よ': 'ょ',
 };
 
+/** 濁音/半濁音使用時の実効ポイント */
+export const DAKUTEN_POINTS: Record<string, number> = {
+  'が': 3, 'ぎ': 3, 'ぐ': 3, 'げ': 3, 'ご': 3,
+  'ざ': 4, 'じ': 4, 'ず': 4, 'ぜ': 4, 'ぞ': 4,
+  'だ': 3, 'ぢ': 3, 'づ': 3, 'で': 3, 'ど': 3,
+  'ば': 4, 'び': 4, 'ぶ': 4, 'べ': 4, 'ぼ': 4,
+  'ぱ': 5, 'ぴ': 5, 'ぷ': 5, 'ぺ': 5, 'ぽ': 5,
+};
+
+/** タイルの実効ポイントを取得（濁音/半濁音考慮） */
+export function getEffectivePoints(tile: { points: number; isBlank: boolean; assignedChar?: string }): number {
+  if (tile.isBlank) return 0;
+  if (tile.assignedChar && DAKUTEN_POINTS[tile.assignedChar] !== undefined) {
+    return DAKUTEN_POINTS[tile.assignedChar];
+  }
+  return tile.points;
+}
+
 /** 濁音/半濁音の割り当てが有効かチェック */
 export function isValidDakutenAssignment(baseChar: string, assignedChar: string): boolean {
   const variants = DAKUTEN_MAP[baseChar];

@@ -3,7 +3,7 @@ import type { DragEvent } from 'react';
 import type { GameState, Tile, TilePlacement, PlayerInfo } from '../../../shared/src/protocol';
 import { BONUS_LAYOUT } from '../constants/board';
 import { BlankTileModal } from './BlankTileModal';
-import { DAKUTEN_MAP } from '../../../shared/src/kana';
+import { DAKUTEN_MAP, DAKUTEN_POINTS, getEffectivePoints } from '../../../shared/src/kana';
 
 interface Props {
   gameState: GameState;
@@ -328,7 +328,7 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
                   {committedTile ? (
                     <div className={`tile committed ${committedTile.isBlank ? 'blank-tile' : ''}`}>
                       {committedTile.assignedChar || committedTile.char}
-                      <span className="tile-points">{committedTile.points}</span>
+                      <span className="tile-points">{getEffectivePoints(committedTile)}</span>
                     </div>
                   ) : pending ? (
                     <div
@@ -338,7 +338,7 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
                       onDragEnd={handleDragEnd}
                     >
                       {pending.assignedChar || pending.tile.char}
-                      <span className="tile-points">{pending.tile.points}</span>
+                      <span className="tile-points">{getEffectivePoints({ ...pending.tile, assignedChar: pending.assignedChar })}</span>
                     </div>
                   ) : (
                     bonus !== 'NONE' && (
@@ -361,6 +361,9 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
                 : isSelected && dakutenOverride
                   ? dakutenOverride
                   : tile.char;
+              const displayPoints = isSelected && dakutenOverride
+                ? (DAKUTEN_POINTS[dakutenOverride] ?? tile.points)
+                : tile.points;
 
               return (
                 <div
@@ -376,7 +379,7 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
                   onDragEnd={handleDragEnd}
                 >
                   {displayChar}
-                  <span className="tile-points">{tile.points}</span>
+                  <span className="tile-points">{displayPoints}</span>
                 </div>
               );
             })}

@@ -7,6 +7,7 @@ import { Dictionary } from './Dictionary.js';
 import { BoardValidator } from './BoardValidator.js';
 import { createBonusLayout } from './board.js';
 import { BOARD_SIZE, RACK_SIZE, BINGO_BONUS } from './tiles.js';
+import { getEffectivePoints } from 'shared/src/kana.js';
 
 const TURN_TIME_MS = 60_000; // 60秒
 
@@ -145,7 +146,7 @@ export class Game {
       let wordMultiplier = 1;
 
       for (const wt of wf.tiles) {
-        const tilePoints = wt.tile.isBlank ? 0 : wt.tile.points;
+        const tilePoints = getEffectivePoints(wt.tile);
         if (wt.isNew) {
           const bonus = this.bonusLayout[wt.row][wt.col];
           switch (bonus) {

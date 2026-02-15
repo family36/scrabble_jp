@@ -22,6 +22,13 @@ const JMDICT_URL = 'https://github.com/scriptin/jmdict-simplified/releases/lates
 const JMDICT_WORDS_URL = 'https://raw.githubusercontent.com/scriptin/jmdict-simplified/refs/heads/master/README.md';
 
 const HIRAGANA_RE = /^[ぁ-ゔっゃゅょゎー]{2,15}$/;
+const KATAKANA_RE = /^[ァ-ヴッャュョヮー]{2,15}$/;
+
+function katakanaToHiragana(str: string): string {
+  return str.replace(/[ァ-ヶ]/g, ch =>
+    String.fromCharCode(ch.charCodeAt(0) - 0x60)
+  );
+}
 
 function httpsGet(url: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -85,8 +92,12 @@ async function downloadAndExtractJMdict(): Promise<Set<string>> {
     for (const entry of json.words || []) {
       for (const kana of entry.kana || []) {
         const text = kana.text;
-        if (text && HIRAGANA_RE.test(text)) {
+        if (!text) continue;
+        if (HIRAGANA_RE.test(text)) {
           words.add(text);
+        } else if (KATAKANA_RE.test(text)) {
+          // カタカナ語もひらがなに変換して追加
+          words.add(katakanaToHiragana(text));
         }
       }
     }
