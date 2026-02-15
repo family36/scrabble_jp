@@ -532,6 +532,24 @@ input[type="text"]:focus {
   margin-bottom: 16px;
 }
 
+.gojuon-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 36px);
+  grid-template-rows: repeat(5, 36px) 12px repeat(5, 36px);
+  gap: 3px;
+  margin-bottom: 16px;
+  justify-content: center;
+}
+
+.modal-gojuon {
+  max-width: min(520px, 95vw);
+}
+
+.gojuon-grid .char-btn {
+  width: 36px;
+  height: 36px;
+}
+
 .char-btn {
   width: 36px;
   height: 36px;
