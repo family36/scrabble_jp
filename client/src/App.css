@@ -550,6 +550,13 @@ input[type="text"]:focus {
   color: white;
 }
 
+/* Sidebar top row */
+.sidebar-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* Tile count info */
 .tile-info {
   background: var(--surface);
@@ -557,6 +564,27 @@ input[type="text"]:focus {
   border-radius: 6px;
   font-size: 0.85rem;
   color: var(--text-dim);
+  flex: 1;
+}
+
+/* Mute button */
+.mute-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: none;
+  border-radius: 6px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.mute-btn:hover {
+  background: var(--surface2);
 }
 
 /* Drag ghost */

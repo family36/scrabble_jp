@@ -13,6 +13,10 @@ interface Props {
   onExchange: (tileIds: number[]) => void;
   onPass: () => void;
   onClearError: () => void;
+  onTilePlace: () => void;
+  onBGMFast: (fast: boolean) => void;
+  muted: boolean;
+  onToggleMute: () => void;
 }
 
 interface PendingPlacement {
@@ -30,7 +34,7 @@ const BONUS_LABELS: Record<string, string> = {
   START: '★',
 };
 
-export function GameView({ gameState, playerId, winner, error, onPlayTiles, onExchange, onPass, onClearError }: Props) {
+export function GameView({ gameState, playerId, winner, error, onPlayTiles, onExchange, onPass, onClearError, onTilePlace, onBGMFast, muted, onToggleMute }: Props) {
   const [pendingPlacements, setPendingPlacements] = useState<PendingPlacement[]>([]);
   const [exchangeMode, setExchangeMode] = useState(false);
   const [exchangeSelection, setExchangeSelection] = useState<Set<number>>(new Set());
@@ -44,17 +48,21 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
   const isPlaying = gameState.phase === 'playing';
   const isFinished = gameState.phase === 'finished';
 
-  // Timer countdown
+  // Timer countdown + BGM speed-up when < 10s
   useEffect(() => {
     if (!isPlaying || gameState.turnDeadline <= 0) return;
     const update = () => {
       const remaining = Math.max(0, Math.ceil((gameState.turnDeadline - Date.now()) / 1000));
       setTimeLeft(remaining);
+      onBGMFast(remaining > 0 && remaining <= 10);
     };
     update();
     const interval = setInterval(update, 1000);
-    return () => clearInterval(interval);
-  }, [isPlaying, gameState.turnDeadline]);
+    return () => {
+      clearInterval(interval);
+      onBGMFast(false);
+    };
+  }, [isPlaying, gameState.turnDeadline, onBGMFast]);
 
   // Clear pending placements when turn changes (successful play)
   const prevTurnPlayer = useRef(gameState.currentPlayerId);
@@ -118,12 +126,14 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
         const filtered = prev.filter(p => !(p.row === source.row && p.col === source.col));
         return [...filtered, { row, col, tile, assignedChar: old?.assignedChar }];
       });
+      onTilePlace();
     } else {
       // Dragging from rack
       if (tile.isBlank) {
         setBlankModal({ tile, row, col });
       } else {
         setPendingPlacements(prev => [...prev, { row, col, tile }]);
+        onTilePlace();
       }
     }
   };
@@ -158,9 +168,10 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
       } else {
         setPendingPlacements(prev => [...prev, { row, col, tile: selectedRackTile }]);
         setSelectedRackTile(null);
+        onTilePlace();
       }
     }
-  }, [isMyTurn, isPlaying, exchangeMode, selectedRackTile, pendingPlacements, gameState.board]);
+  }, [isMyTurn, isPlaying, exchangeMode, selectedRackTile, pendingPlacements, gameState.board, onTilePlace]);
 
   const handleBlankSelect = (char: string) => {
     if (!blankModal) return;
@@ -170,6 +181,7 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
     ]);
     setSelectedRackTile(null);
     setBlankModal(null);
+    onTilePlace();
   };
 
   const handleRackTileClick = (tile: Tile) => {
@@ -373,8 +385,17 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
 
       {/* Sidebar */}
       <div className="game-sidebar">
-        <div className="tile-info">
-          残りタイル: {gameState.tilesRemaining}枚
+        <div className="sidebar-top">
+          <div className="tile-info">
+            残りタイル: {gameState.tilesRemaining}枚
+          </div>
+          <button
+            className="mute-btn"
+            onClick={onToggleMute}
+            title={muted ? '音声ON' : '音声OFF'}
+          >
+            {muted ? '🔇' : '🔊'}
+          </button>
         </div>
 
         <div className="scoreboard">

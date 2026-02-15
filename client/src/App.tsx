@@ -3,6 +3,7 @@ import { Lobby } from './components/Lobby';
 import { WaitingRoom } from './components/WaitingRoom';
 import { GameView } from './components/GameView';
 import { useWebSocket } from './hooks/useWebSocket';
+import { useAudio } from './hooks/useAudio';
 import type { GameState, ServerMessage, TilePlacement, PlayerInfo } from '../../shared/src/protocol';
 import './App.css';
 
@@ -18,6 +19,8 @@ export default function App() {
   const [isHost, setIsHost] = useState(false);
   const [winner, setWinner] = useState<PlayerInfo | null>(null);
   const playerNameRef = useRef('');
+  const prevTurnPlayerRef = useRef('');
+  const { playBGM, stopBGM, setBGMFast, playSE, toggleMute, muted } = useAudio();
 
   const handleMessage = useCallback((msg: ServerMessage) => {
     setError('');
@@ -50,14 +53,30 @@ export default function App() {
       case 'GAME_STARTED':
         setGameState(msg.gameState);
         setScreen('game');
+        playSE('gameStart');
+        playBGM();
+        prevTurnPlayerRef.current = msg.gameState.currentPlayerId;
         break;
       case 'GAME_STATE':
         setGameState(msg.gameState);
         if (screen !== 'game') setScreen('game');
+        if (msg.gameState.currentPlayerId !== prevTurnPlayerRef.current) {
+          playSE('turnStart');
+          prevTurnPlayerRef.current = msg.gameState.currentPlayerId;
+        }
         break;
       case 'PLAY_RESULT':
-        if (msg.success && msg.gameState) setGameState(msg.gameState);
-        if (!msg.success && msg.error) setError(msg.error);
+        if (msg.success && msg.gameState) {
+          setGameState(msg.gameState);
+          playSE('wordSuccess');
+          if (msg.gameState.currentPlayerId !== prevTurnPlayerRef.current) {
+            prevTurnPlayerRef.current = msg.gameState.currentPlayerId;
+          }
+        }
+        if (!msg.success && msg.error) {
+          setError(msg.error);
+          playSE('wordError');
+        }
         break;
       case 'EXCHANGE_RESULT':
         if (msg.success && msg.gameState) setGameState(msg.gameState);
@@ -66,6 +85,8 @@ export default function App() {
       case 'GAME_OVER':
         setGameState(msg.gameState);
         setWinner(msg.winner);
+        playSE('gameOver');
+        stopBGM();
         break;
       case 'PLAYER_RECONNECTED':
         break;
@@ -73,7 +94,7 @@ export default function App() {
         setError(msg.message);
         break;
     }
-  }, [screen]);
+  }, [screen, playSE, playBGM, stopBGM]);
 
   const { send, connected } = useWebSocket(handleMessage);
 
@@ -149,6 +170,10 @@ export default function App() {
           onExchange={handleExchange}
           onPass={handlePass}
           onClearError={() => setError('')}
+          onTilePlace={() => playSE('tilePlace')}
+          onBGMFast={setBGMFast}
+          muted={muted}
+          onToggleMute={toggleMute}
         />
       )}
     </div>
