@@ -48,7 +48,7 @@ const CHORD_PROG: number[][] = [
 const BASS_ROOTS = [82.41, 65.41, 55.00, 61.74]; // E2, C2, A1, B1
 
 // Melody: Em pentatonic
-const MEL = [329.63, 392.00, 440.00, 493.88, 587.33]; // E4, G4, A4, B4, D5
+const MEL = [329.63, 392.00, 440.00, 493.88, 293.66]; // E4, G4, A4, B4, D4
 
 // Melody sequence: [barInLoop, beatInBar, melodyIndex, durationInBeats]
 const MELODY_SEQ: [number, number, number, number][] = [
@@ -238,13 +238,13 @@ function scheduleMelodyNote(
   // Gentle low-pass per note for extra softness
   const filter = ctx.createBiquadFilter();
   filter.type = 'lowpass';
-  filter.frequency.value = 1200;
-  filter.Q.value = 0.5;
+  filter.frequency.value = 700;
+  filter.Q.value = 0.3;
 
   const env = ctx.createGain();
   env.gain.setValueAtTime(0, t);
-  env.gain.linearRampToValueAtTime(0.09, t + 0.06);
-  env.gain.setValueAtTime(0.09, t + dur * 0.6);
+  env.gain.linearRampToValueAtTime(0.055, t + 0.08);
+  env.gain.setValueAtTime(0.055, t + dur * 0.6);
   env.gain.linearRampToValueAtTime(0, t + dur);
 
   osc.connect(filter);
