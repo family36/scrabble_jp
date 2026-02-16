@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { RulesModal } from './RulesModal';
 
 interface Props {
   onCreateRoom: (name: string) => void;
@@ -8,6 +9,7 @@ interface Props {
 export function Lobby({ onCreateRoom, onJoinRoom }: Props) {
   const [name, setName] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  const [showRules, setShowRules] = useState(false);
 
   return (
     <div className="lobby">
@@ -53,6 +55,12 @@ export function Lobby({ onCreateRoom, onJoinRoom }: Props) {
           </button>
         </div>
       </div>
+
+      <button className="btn btn-secondary" onClick={() => setShowRules(true)}>
+        遊び方
+      </button>
+
+      {showRules && <RulesModal onClose={() => setShowRules(false)} />}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import type { DragEvent } from 'react';
 import type { GameState, Tile, TilePlacement, PlayerInfo } from '../../../shared/src/protocol';
 import { BONUS_LAYOUT } from '../constants/board';
 import { BlankTileModal } from './BlankTileModal';
+import { RulesModal } from './RulesModal';
 import { DAKUTEN_MAP, DAKUTEN_POINTS, getEffectivePoints } from '../../../shared/src/kana';
 
 interface Props {
@@ -41,6 +42,7 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
   const [exchangeSelection, setExchangeSelection] = useState<Set<number>>(new Set());
   const [blankModal, setBlankModal] = useState<{ tile: Tile; row: number; col: number } | null>(null);
   const [dropTarget, setDropTarget] = useState<{ row: number; col: number } | null>(null);
+  const [showRules, setShowRules] = useState(false);
   const [timeLeft, setTimeLeft] = useState(60);
   const dragTileRef = useRef<Tile | null>(null);
   const dragSourceRef = useRef<{ row: number; col: number } | null>(null);
@@ -467,9 +469,16 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
           <button
             className="mute-btn"
             onClick={onToggleMute}
-            title={muted ? '音声ON' : '音声OFF'}
+            title={muted ? 'BGM ON' : 'BGM OFF'}
           >
             {muted ? '🔇' : '🔊'}
+          </button>
+          <button
+            className="mute-btn rules-btn"
+            onClick={() => setShowRules(true)}
+            title="遊び方"
+          >
+            ?
           </button>
         </div>
 
@@ -503,6 +512,9 @@ export function GameView({ gameState, playerId, winner, error, onPlayTiles, onEx
           ))}
         </div>
       </div>
+
+      {/* Rules modal */}
+      {showRules && <RulesModal onClose={() => setShowRules(false)} />}
 
       {/* Blank tile modal */}
       {blankModal && (
